@@ -1,103 +1,99 @@
-# smart-factory-dt-rl
+# Smart Factory Digital Twin RL
 
-A research-oriented Python project for studying AGV dispatching policies in a 2D smart factory digital twin.
+This repository contains a Python-based 2D smart factory digital twin simulator for analyzing AGV dispatching policies under bottleneck and congestion scenarios. The current project is an MVP and preliminary research experiment focused on comparing simple dispatching baselines with a bottleneck-aware policy using repeatable scenario configs, step-level logs, summary tables, plots, and lightweight animations.
 
-## MVP Research Topic
+## Research Motivation
 
-**Performance analysis of bottleneck-aware AGV dispatching policies in a 2D smart factory digital twin.**
+AGV dispatching decisions affect factory throughput, waiting time, travel distance, and bottleneck formation. A FIFO policy is simple and interpretable, but it ignores AGV distance and process-level bottlenecks. A nearest-job policy can reduce AGV travel distance, but it may still send jobs into congested process stations. A bottleneck-aware policy attempts to use process queue information so dispatching decisions can relieve congested stations and avoid worsening active bottlenecks.
 
-The first real result will compare baseline and bottleneck-aware dispatch policies across controlled factory scenarios. The simulator is still intentionally small, but the project direction is now experiment-first: define scenarios, run comparable policies, collect metrics, and build toward publishable analysis.
+## Current MVP Scope
 
-## Factory Flow
-
-```text
-Input -> ProcessA -> ProcessB -> ProcessC -> Output
-```
-
-Initial scope:
-
+- 2D factory flow: `Input -> ProcessA -> ProcessB -> ProcessC -> Output`
 - 1 to 3 AGVs
 - Job generation
-- Process queues with fixed processing times
-- AGV transport tasks
+- Process queues and fixed processing times
 - FIFO, nearest-job, and bottleneck-aware dispatch policies
-- Step-level logging
-- Scenario-based policy comparison
+- Step-level simulation logs
+- Policy comparison summary tables
+- Report-ready comparison plots
+- Lightweight 2D GIF animation for inspecting queue and bottleneck dynamics
 
-## Policies
+## Experiment Scenarios
 
-- `FIFO`: select the oldest pending transport task.
-- `Nearest-job`: select the task with the nearest pickup location.
-- `Bottleneck-aware`: prefer tasks that relieve the current bottleneck and avoid sending more jobs into it.
+- `basic`: ProcessA, ProcessB, and ProcessC have similar processing times.
+- `bottleneck_B`: ProcessB has a larger processing time, creating a controlled bottleneck.
+- `congested`: jobs arrive with a high probability, increasing queue pressure.
+- `agv_1`, `agv_2`, `agv_3`: AGV count variation configs for capacity sensitivity checks.
 
-The bottleneck-aware policy is currently a skeleton. Its intended score combines task age, AGV distance, bottleneck relief, and bottleneck inflow penalty.
+## Policies Compared
+
+- `FIFO`: selects the oldest pending transport task.
+- `nearest-job`: selects the task with the nearest pickup location.
+- `bottleneck-aware`: uses a preliminary bottleneck score based on process queue state, favoring tasks that relieve the bottleneck and penalizing tasks that send more work into it.
 
 ## Metrics
 
-Target experiment metrics:
-
 - `completed_jobs`
 - `throughput`
-- `average_waiting_time`
-- `total_agv_distance`
-- `bottleneck_count`
-- `process_utilization`
-- `queue_length_over_time`
-- `agv_utilization`
+- `pending_tasks`
+- total AGV distance
+- AGV utilization
+- process utilization
+- average queue length
+- bottleneck count
 
-Some metrics are not fully implemented yet and are tracked as TODOs in the simulation and comparison code.
+## Key Preliminary Results
 
-## Scenarios
+The current MVP results should be interpreted as an initial baseline, not a final performance claim. In the `basic` scenario, policy differences are small because process times and queue pressure are relatively balanced. In the `bottleneck_B` scenario, ProcessB utilization becomes high, confirming that the scenario creates the intended bottleneck. In the `congested` scenario, nearest-job achieved higher `completed_jobs` than FIFO, while bottleneck-aware improved over FIFO but did not always outperform nearest-job. Future work will refine these findings with additional seeds, better bottleneck-aware scoring, and richer dispatching metrics.
 
-Scenario config files live in `config/`:
+## Result Figures
 
-- `basic.yaml`: similar processing times at ProcessA/B/C.
-- `bottleneck_B.yaml`: ProcessB has much larger processing time.
-- `congested.yaml`: high job arrival pressure.
-- `agv_1.yaml`: one AGV.
-- `agv_2.yaml`: two AGVs.
-- `agv_3.yaml`: three AGVs.
+![Completed jobs by policy](results/figures/completed_jobs_by_policy.png)
 
-## Project Structure
+![Throughput by policy](results/figures/throughput_by_policy.png)
 
-```text
-config/                 Experiment scenario configurations
-data/logs/              Step-level simulation logs
-reports/                Research notes and generated reports
-results/figures/        Policy comparison plots
-results/tables/         Run-level and aggregated summary CSVs
-scripts/                Experiment entry points
-src/
-  logging_utils/        Simulation logging helpers
-  policies/             AGV dispatch policies
-  simulator/            Core factory simulation entities
-  utils/                Config and reproducibility utilities
-  visualization/        Plotting helpers
-tests/                  Skeleton tests
-```
+![Total AGV distance by policy](results/figures/total_agv_distance_by_policy.png)
 
-## Quick Start
+![Bottleneck count by policy](results/figures/bottleneck_count_by_policy.png)
 
-```bash
+![Process utilization by policy](results/figures/process_utilization_by_policy.png)
+
+## Animation Examples
+
+![Congested FIFO animation](results/animations/factory_congested_fifo_seed42.gif)
+
+![Congested nearest-job animation](results/animations/factory_congested_nearest_seed42.gif)
+
+## How To Run
+
+```powershell
 python -m venv .venv
+.\.venv\Scripts\activate
 pip install -r requirements.txt
-python scripts/run_simulation.py
-python scripts/compare_policies.py
-pytest
+python scripts/run_simulation.py --config config/basic.yaml --policy fifo
+python scripts/compare_policies.py --seeds 42 43 44
+python scripts/generate_plots.py
+python scripts/generate_animation.py --log data/logs/step_log_congested_fifo_seed42.csv
 ```
 
-## Current Scope
+## Repository Structure
 
-The current codebase provides safe, minimal class skeletons and simple placeholder behavior. It does not yet implement complex path planning, collision avoidance, 3D simulation, reinforcement learning dependencies, or a Gymnasium environment.
+- `config/`: scenario and experiment configuration files.
+- `src/simulator/`: core 2D factory simulation entities and environment.
+- `src/policies/`: FIFO, nearest-job, and bottleneck-aware AGV dispatch policies.
+- `src/visualization/`: plotting and animation utilities.
+- `scripts/`: command-line entry points for runs, comparisons, plots, and animations.
+- `data/logs/`: step-level simulation logs.
+- `results/tables/`: run-level and aggregated policy comparison CSV files.
+- `results/figures/`: report-ready policy comparison plots.
+- `results/animations/`: lightweight 2D GIF animations.
 
-## Research Roadmap
+## Future Work
 
-TODO:
-
-- Implement complete run-level metrics for throughput, waiting time, bottleneck count, and AGV utilization.
-- Export run-level summary CSV files.
-- Export aggregated scenario × policy summary CSV files.
-- Add policy comparison plots for throughput, distance, waiting time, utilization, and queue dynamics.
-- Expand bottleneck-aware policy inputs to include live station queue lengths and utilization.
-- Add richer event semantics for job release, station completion, and AGV pickup/drop-off.
-- Add a Gymnasium-compatible environment only after the simulator API stabilizes.
+- Improve bottleneck-aware policy scoring.
+- Add more robust repeated experiments with broader seed sets.
+- Add bottleneck prediction using time-series models.
+- Add a Gymnasium-compatible reinforcement learning environment.
+- Evaluate DQN/PPO-based AGV dispatching.
+- Extend toward a 3D digital twin visualization.
+- Explore constrained-space and space logistics extensions.
