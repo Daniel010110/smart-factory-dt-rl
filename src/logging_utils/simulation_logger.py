@@ -9,26 +9,50 @@ import pandas as pd
 class SimulationLogger:
     """Collect and export step-level simulation records."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        scenario: str = "",
+        policy_name: str = "",
+        seed: int | None = None,
+    ) -> None:
+        self.scenario = scenario
+        self.policy_name = policy_name
+        self.seed = seed
         self.records: list[dict[str, Any]] = []
 
     def log_step(self, time: int, state: dict[str, object]) -> None:
         """Store a compact state record for one simulation step."""
 
+        stations = state.get("stations", {})
+        station_states = stations if isinstance(stations, dict) else {}
+        process_a = station_states.get("ProcessA", {})
+        process_b = station_states.get("ProcessB", {})
+        process_c = station_states.get("ProcessC", {})
+
         record = {
-            "time": time,
+            "scenario": self.scenario,
+            "policy_name": self.policy_name,
+            "seed": self.seed,
+            "step": time,
+            "queue_A": self._queue_length(process_a),
+            "queue_B": self._queue_length(process_b),
+            "queue_C": self._queue_length(process_c),
             "pending_tasks": state["pending_tasks"],
-            "completed_jobs": state["completed_jobs"],
+            "num_jobs_completed": state["completed_jobs"],
+            "throughput": state["throughput"],
+            "total_agv_distance": state["total_agv_distance"],
+            "bottleneck_station": state["bottleneck_station"],
+            "bottleneck_queue_length": state["bottleneck_queue_length"],
         }
 
-        stations = state.get("stations", {})
-        if isinstance(stations, dict):
-            for name, station_state in stations.items():
-                if isinstance(station_state, dict):
-                    record[f"{name}_queue_length"] = station_state.get("queue_length")
-                    record[f"{name}_utilization"] = station_state.get("utilization")
-
         self.records.append(record)
+
+    def _queue_length(self, station_state: object) -> int:
+        """Return a queue length from a station state object."""
+
+        if not isinstance(station_state, dict):
+            return 0
+        return int(station_state.get("queue_length", 0))
 
     def to_dataframe(self) -> pd.DataFrame:
         """Return records as a pandas DataFrame."""

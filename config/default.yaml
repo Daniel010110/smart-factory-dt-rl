@@ -1,8 +1,28 @@
 simulation:
+  seed: 42
   max_steps: 100
   random_seed: 42
   job_interval: 5
+  job_arrival_probability: 0.2
   max_jobs: 10
+
+job_generation:
+  mode: probability
+  arrival_probability: 0.2
+  arrival_interval: 5
+
+processes:
+  ProcessA:
+    processing_time: 3
+  ProcessB:
+    processing_time: 4
+  ProcessC:
+    processing_time: 5
+
+agv:
+  num_agvs: 2
+  speed: 1.0
+  start_location: Input
 
 factory:
   agv_count: 2

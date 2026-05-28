@@ -1,5 +1,7 @@
 """Factory environment orchestration."""
 
+import random
+
 from logging_utils.simulation_logger import SimulationLogger
 from policies.base_policy import BasePolicy
 from simulator.agv import AGV
@@ -14,10 +16,20 @@ class FactoryEnv:
 
     ROUTE = ["Input", "ProcessA", "ProcessB", "ProcessC", "Output"]
 
-    def __init__(self, config: dict[str, object], policy: BasePolicy) -> None:
+    def __init__(
+        self,
+        config: dict[str, object],
+        policy: BasePolicy,
+        scenario_name: str = "",
+        policy_name: str = "",
+        seed: int | None = None,
+    ) -> None:
         self.config = config
         self.policy = policy
-        self.logger = SimulationLogger()
+        self.scenario_name = scenario_name
+        self.policy_name = policy_name
+        self.seed = seed
+        self.logger = SimulationLogger(scenario_name, policy_name, seed)
         self.time = 0
         self.next_job_id = 1
         self.next_task_id = 1
@@ -37,7 +49,7 @@ class FactoryEnv:
         self.jobs = []
         self.completed_jobs = []
         self.pending_tasks = []
-        self.logger = SimulationLogger()
+        self.logger = SimulationLogger(self.scenario_name, self.policy_name, self.seed)
         self.layout = self._build_layout()
         self.stations = self._build_stations()
         self.agvs = self._build_agvs()
@@ -81,6 +93,10 @@ class FactoryEnv:
             "time": self.time,
             "pending_tasks": len(self.pending_tasks),
             "completed_jobs": len(self.completed_jobs),
+            "throughput": self._throughput(),
+            "total_agv_distance": self._total_agv_distance(),
+            "bottleneck_station": self._bottleneck_station()[0],
+            "bottleneck_queue_length": self._bottleneck_station()[1],
             "agvs": [
                 {
                     "agv_id": agv.agv_id,
@@ -107,12 +123,12 @@ class FactoryEnv:
         return {
             "completed_jobs": len(self.completed_jobs),
             "pending_tasks": len(self.pending_tasks),
+            "throughput": self._throughput(),
             "station_utilization": {
                 name: station.utilization for name, station in self.stations.items()
             },
-            "agv_total_distance": {
-                agv.agv_id: agv.total_distance for agv in self.agvs
-            },
+            "agv_total_distance": self._total_agv_distance(),
+            "agv_distance_by_id": {agv.agv_id: agv.total_distance for agv in self.agvs},
         }
 
     def _build_layout(self) -> Layout:
@@ -121,12 +137,23 @@ class FactoryEnv:
             name: tuple(value)
             for name, value in layout_config.get("locations", {}).items()
         }
-        travel_time_per_unit = float(self.config.get("factory", {}).get("travel_time_per_unit", 1))  # type: ignore[union-attr]
+        agv_config = self.config.get("agv", {})  # type: ignore[assignment]
+        factory_config = self.config.get("factory", {})  # type: ignore[assignment]
+        speed = float(agv_config.get("speed", 0) or 0)
+        travel_time_per_unit = 1.0 / speed if speed > 0 else float(factory_config.get("travel_time_per_unit", 1))
         return Layout(locations=locations, travel_time_per_unit=travel_time_per_unit)
 
     def _build_stations(self) -> dict[str, ProcessStation]:
         factory_config = self.config.get("factory", {})  # type: ignore[assignment]
-        processing_times = factory_config.get("processing_times", {})
+        process_config = self.config.get("processes", {})  # type: ignore[assignment]
+        if process_config:
+            processing_times = {
+                name: values.get("processing_time", 1)
+                for name, values in process_config.items()
+                if isinstance(values, dict)
+            }
+        else:
+            processing_times = factory_config.get("processing_times", {})
         return {
             name: ProcessStation(name=name, processing_time=int(processing_time))
             for name, processing_time in processing_times.items()
@@ -134,15 +161,38 @@ class FactoryEnv:
 
     def _build_agvs(self) -> list[AGV]:
         factory_config = self.config.get("factory", {})  # type: ignore[assignment]
-        agv_count = int(factory_config.get("agv_count", 1))
-        return [AGV(agv_id=i + 1, initial_location="Input") for i in range(agv_count)]
+        agv_config = self.config.get("agv", {})  # type: ignore[assignment]
+        agv_count = int(agv_config.get("num_agvs", factory_config.get("agv_count", 1)))
+        start_location = str(agv_config.get("start_location", "Input"))
+        return [AGV(agv_id=i + 1, initial_location=start_location) for i in range(agv_count)]
 
     def _generate_jobs(self) -> None:
         simulation_config = self.config.get("simulation", {})  # type: ignore[assignment]
-        job_interval = int(simulation_config.get("job_interval", 5))
+        job_generation_config = self.config.get("job_generation", {})  # type: ignore[assignment]
+        arrival_interval = max(
+            1,
+            int(job_generation_config.get("arrival_interval", simulation_config.get("job_interval", 5))),
+        )
+        arrival_probability = job_generation_config.get(
+            "arrival_probability",
+            simulation_config.get("job_arrival_probability"),
+        )
+        arrival_mode = job_generation_config.get(
+            "mode",
+            "probability" if arrival_probability is not None else "interval",
+        )
         max_jobs = int(simulation_config.get("max_jobs", 10))
 
-        if self.time % job_interval != 0 or len(self.jobs) >= max_jobs:
+        if len(self.jobs) >= max_jobs:
+            return
+
+        should_create = False
+        if arrival_mode == "probability" and arrival_probability is not None:
+            should_create = random.random() <= float(arrival_probability)
+        else:
+            should_create = self.time % arrival_interval == 0
+
+        if not should_create:
             return
 
         job = Job(job_id=self.next_job_id, created_at=self.time, route=self.ROUTE.copy())
@@ -190,3 +240,22 @@ class FactoryEnv:
 
         # TODO: Add blocking/starvation semantics once station buffers are modeled.
         # TODO: Add event callbacks for future Gymnasium observation/reward design.
+
+    def _total_agv_distance(self) -> int:
+        """Return total distance traveled by all AGVs."""
+
+        return sum(agv.total_distance for agv in self.agvs)
+
+    def _throughput(self) -> float:
+        """Return completed jobs per elapsed step."""
+
+        elapsed_steps = max(1, self.time + 1)
+        return len(self.completed_jobs) / elapsed_steps
+
+    def _bottleneck_station(self) -> tuple[str | None, int]:
+        """Return the station with the longest current queue."""
+
+        if not self.stations:
+            return None, 0
+        station = max(self.stations.values(), key=lambda item: len(item.queue))
+        return station.name, len(station.queue)
