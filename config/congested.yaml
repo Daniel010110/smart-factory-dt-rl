@@ -1,0 +1,27 @@
+simulation:
+  scenario_name: congested
+  max_steps: 100
+  random_seed: 42
+  seeds: [42, 43, 44]
+  job_interval: 2
+  job_arrival_probability: 0.8
+  max_jobs: 30
+
+factory:
+  agv_count: 2
+  travel_time_per_unit: 1
+  processing_times:
+    ProcessA: 4
+    ProcessB: 4
+    ProcessC: 4
+
+layout:
+  locations:
+    Input: [0, 0]
+    ProcessA: [2, 0]
+    ProcessB: [4, 0]
+    ProcessC: [6, 0]
+    Output: [8, 0]
+
+logging:
+  output_path: data/logs/congested_simulation_log.csv

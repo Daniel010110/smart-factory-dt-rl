@@ -1,0 +1,27 @@
+simulation:
+  scenario_name: agv_3
+  max_steps: 100
+  random_seed: 42
+  seeds: [42, 43, 44]
+  job_interval: 5
+  job_arrival_probability: 0.2
+  max_jobs: 10
+
+factory:
+  agv_count: 3
+  travel_time_per_unit: 1
+  processing_times:
+    ProcessA: 4
+    ProcessB: 4
+    ProcessC: 4
+
+layout:
+  locations:
+    Input: [0, 0]
+    ProcessA: [2, 0]
+    ProcessB: [4, 0]
+    ProcessC: [6, 0]
+    Output: [8, 0]
+
+logging:
+  output_path: data/logs/agv_3_simulation_log.csv
