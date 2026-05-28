@@ -24,6 +24,9 @@ agv:
   speed: 1.0
   start_location: Input
 
+metrics:
+  bottleneck_queue_threshold: 3
+
 factory:
   agv_count: 2
   travel_time_per_unit: 1
